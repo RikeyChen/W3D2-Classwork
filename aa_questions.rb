@@ -61,6 +61,10 @@ class Question
   def replies
     Reply.find_by_question_id(@id)
   end
+
+  def followers
+    QuestionFollow.followers_for_question_id(@id)
+  end
 end
 
 
@@ -169,6 +173,85 @@ class User
   def authored_replies
     Reply.find_by_user_id(@id)
   end
+
+  def followed_questions
+    QuestionFollow.followed_questions_for_user_id(@id)
+  end
+end
+
+class QuestionFollow
+  attr_accessor :user_id, :question_id
+
+  def self.followers_for_question_id(question_id)
+    followers = QuestionsDBConnection.instance.execute(<<-SQL, question_id)
+      SELECT
+        users.*
+      FROM
+        users
+      JOIN
+        question_follows
+      ON
+        question_follows.user_id = users.id
+      JOIN
+        questions
+      ON
+        questions.id = question_follows.question_id
+      WHERE
+        questions.id = ?
+    SQL
+    followers.map { |follower_data| User.new(follower_data) } unless followers.empty?
+  end
+
+  def self.followed_questions_for_user_id(user_id)
+    followed_questions = QuestionsDBConnection.instance.execute(<<-SQL, user_id)
+      SELECT
+        questions.*
+      FROM
+        users
+      JOIN
+        question_follows
+      ON
+        question_follows.user_id = users.id
+      JOIN
+        questions
+      ON
+        questions.id = question_follows.question_id
+      WHERE
+        users.id = ?
+    SQL
+    followed_questions.map { |question_datum| Question.new(question_datum) } unless followed_questions.empty?
+  end
+
+  def self.most_followed_questions(n)
+    questions = QuestionsDBConnection.instance.execute(<<-SQL, n)
+      SELECT
+        questions.*
+      FROM
+        users
+      JOIN
+        question_follows
+      ON
+        question_follows.user_id = users.id
+      JOIN
+        questions
+      ON
+        questions.id = question_follows.question_id
+      GROUP BY
+        questions.id
+      ORDER BY
+        COUNT(*) DESC
+      LIMIT
+        ?
+    SQL
+    questions.map { |question_datum| Question.new(question_datum) } unless questions.empty?
+
+  end
+
+
+  # def initialize(options)
+  #   @user_id = options['user_id']
+  #   @question_id = options['question_id']
+  # end
 end
 
 
