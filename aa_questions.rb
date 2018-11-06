@@ -26,8 +26,8 @@ class Question
     Question.new(question.first)
   end
 
-  def self.find_by_author_id(user_id)
-    question = QuestionsDBConnection.instance.execute(<<-SQL, user_id)
+  def self.find_by_author_id(author_id)
+    question = QuestionsDBConnection.instance.execute(<<-SQL, author_id)
       SELECT
         *
       FROM
@@ -45,7 +45,22 @@ class Question
     @user_id = options['user_id']
   end
 
+  def author
+    authors = QuestionsDBConnection.instance.execute(<<-SQL, user_id)
+      SELECT
+        *
+      FROM
+        users
+      WHERE
+        id = ?
+    SQL
 
+    User.new(authors.first)
+  end
+
+  def replies
+    Reply.find_by_question_id(@id)
+  end
 end
 
 
@@ -84,6 +99,46 @@ class Reply
     @parent_id = options['parent_id']
   end
 
+  def author
+    authors = QuestionsDBConnection.instance.execute(<<-SQL, user_id)
+      SELECT
+        *
+      FROM
+        users
+      WHERE
+        id = ?
+    SQL
+    User.new(authors.first)
+  end
+
+  def question
+    Question.find_by_id(question_id)
+  end
+
+  def parent_reply
+    parent_reply = QuestionsDBConnection.instance.execute(<<-SQL, parent_id)
+      SELECT
+        *
+      FROM
+        replies
+      WHERE
+        id = ?
+    SQL
+    Reply.new(parent_reply.first) unless parent_reply.empty?
+  end
+
+  def child_replies
+    child_replies = QuestionsDBConnection.instance.execute(<<-SQL, @id)
+      SELECT
+        *
+      FROM
+        replies
+      WHERE
+        parent_id = ?
+    SQL
+    child_replies.map { |child_reply_data| Reply.new(child_reply_data) } unless child_replies.empty?
+  end
+
 end
 
 class User
@@ -98,7 +153,7 @@ class User
       WHERE
         fname = ? AND lname = ?
     SQL
-    users.map { |user_data| User.new(user_data) }
+    User.new(users.first)
   end
 
   def initialize(options)
@@ -114,8 +169,6 @@ class User
   def authored_replies
     Reply.find_by_user_id(@id)
   end
-
-
 end
 
 
