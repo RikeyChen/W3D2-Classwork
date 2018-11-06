@@ -82,6 +82,26 @@ class Question
     QuestionLike.num_likes_for_question_id(@id)
   end
 
+  def save
+    if @id
+      QuestionsDBConnection.instance.execute(<<-SQL, @title, @body, @user_id, @id)
+        UPDATE
+          questions
+        SET
+          title = ?, body = ?, user_id = ?
+        WHERE
+          id = ?
+      SQL
+    else
+      QuestionsDBConnection.instance.execute(<<-SQL, @title, @body, @user_id)
+        INSERT INTO
+          questions (title, body, user_id)
+        VALUES
+          (?, ?, ?)
+      SQL
+      @id = QuestionsDBConnection.instance.last_insert_row_id
+    end
+  end
 end
 
 
@@ -160,6 +180,27 @@ class Reply
     child_replies.map { |child_reply_data| Reply.new(child_reply_data) } unless child_replies.empty?
   end
 
+  def save
+    if @id
+      QuestionsDBConnection.instance.execute(<<-SQL, @question_id, @parent_id, @user_id, @body, @id)
+        UPDATE
+          replies
+        SET
+          question_id = ?, parent_id = ?, user_id = ?, body = ?
+        WHERE
+          id = ?
+      SQL
+    else
+      QuestionsDBConnection.instance.execute(<<-SQL, @question_id, @parent_id, @user_id, @body)
+        INSERT INTO
+          replies (question_id, parent_id, user_id, body)
+        VALUES
+          (?, ?, ?, ?)
+      SQL
+      @id = QuestionsDBConnection.instance.last_insert_row_id
+    end
+  end
+
 end
 
 class User
@@ -214,6 +255,28 @@ class User
     SQL
 
     avg_karma.first.values.first
+  end
+
+
+  def save
+    if @id
+      QuestionsDBConnection.instance.execute(<<-SQL, @fname, @lname, @id)
+        UPDATE
+          users
+        SET
+          fname = ?, lname = ?
+        WHERE
+          id = ?
+      SQL
+    else
+      QuestionsDBConnection.instance.execute(<<-SQL, @fname, @lname)
+        INSERT INTO
+          users (fname, lname)
+        VALUES
+          (?, ?)
+      SQL
+      @id = QuestionsDBConnection.instance.last_insert_row_id
+    end
   end
 end
 
