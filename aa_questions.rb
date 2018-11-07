@@ -37,16 +37,21 @@ class ModelBase
   end
 
   def self.where(options)
-    records = QuestionsDBConnection.instance.execute(<<-SQL)
-      SELECT
-        *
-      FROM
-        #{self.to_s.tableize.downcase}
-      WHERE
-        #{options.map { |k, v| v.is_a?(String) ? "#{k} = '#{v}'" :  "#{k} = #{v}" }.join(" AND ")}
-    SQL
+    if options.is_a?(String)
+      where_string = options
+    else
+      where_string = options.map { |k, v| v.is_a?(String) ? "#{k} = '#{v}'" :  "#{k} = #{v}" }.join(" AND ")
+    end
+      records = QuestionsDBConnection.instance.execute(<<-SQL)
+        SELECT
+          *
+        FROM
+          #{self.to_s.tableize.downcase}
+        WHERE
+          #{where_string}
+      SQL
 
-    records.map { |record_datum| self.new(record_datum) } unless records.empty?
+      records.map { |record_datum| self.new(record_datum) } unless records.empty?
   end
 
   def self.find_by(options)
