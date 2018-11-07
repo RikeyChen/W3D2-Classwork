@@ -43,10 +43,14 @@ class ModelBase
       FROM
         #{self.to_s.tableize.downcase}
       WHERE
-        #{options.map { |k, v| "#{k} = #{v}"}.join(" AND ")}
+        #{options.map { |k, v| v.is_a?(String) ? "#{k} = '#{v}'" :  "#{k} = #{v}" }.join(" AND ")}
     SQL
 
     records.map { |record_datum| self.new(record_datum) } unless records.empty?
+  end
+
+  def self.find_by(options)
+    where(options).first
   end
 
   def save
