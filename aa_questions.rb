@@ -36,6 +36,19 @@ class ModelBase
     data.map { |datum| self.new(datum) } unless data.empty?
   end
 
+  def self.where(options)
+    records = QuestionsDBConnection.instance.execute(<<-SQL)
+      SELECT
+        *
+      FROM
+        #{self.to_s.tableize.downcase}
+      WHERE
+        #{options.map { |k, v| "#{k} = #{v}"}.join(" AND ")}
+    SQL
+
+    records.map { |record_datum| self.new(record_datum) } unless records.empty?
+  end
+
   def save
     if @id
       instance_variables = self.instance_variables
