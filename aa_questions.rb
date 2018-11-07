@@ -1,5 +1,7 @@
 require 'sqlite3'
 require 'singleton'
+require 'active_support/inflector'
+require "byebug"
 
 class QuestionsDBConnection < SQLite3::Database
   include Singleton
@@ -11,24 +13,80 @@ class QuestionsDBConnection < SQLite3::Database
   end
 end
 
-class Question
+class ModelBase
+  def self.find_by_id(id)
+    data = QuestionsDBConnection.instance.execute(<<-SQL, id)
+      SELECT
+        *
+      FROM
+        #{self.to_s.tableize.downcase}
+      WHERE
+        id = ?
+    SQL
+    self.new(data.first)
+  end
+
+  def self.all
+    data = QuestionsDBConnection.instance.execute(<<-SQL)
+      SELECT
+        *
+      FROM
+        #{self.to_s.tableize.downcase}
+    SQL
+    data.map { |datum| self.new(datum) } unless data.empty?
+  end
+
+  def save
+    if @id
+      instance_variables = self.instance_variables
+      instance_variables.delete(:@id)
+      set_statement = instance_variables.map { |var| "#{var.to_s[1..-1]} = '#{self.instance_variable_get(var)}'" }.join(", ")
+
+      debugger
+      QuestionsDBConnection.instance.execute(<<-SQL, @id)
+        UPDATE
+          #{self.class.to_s.tableize.downcase}
+        SET
+          #{set_statement}
+        WHERE
+          id = ?
+      SQL
+    else
+      instance_variables = self.instance_variables
+      instance_variables.delete(:@id)
+      update_columns = instance_variables.map { |var| "#{var.to_s[1..-1]}" }.join(", ")
+      values = instance_variables.map { |var| self.instance_variable_get(var) }
+      question_marks = instance_variables.map { |var| "?" }.join(", ")
+
+      QuestionsDBConnection.instance.execute(<<-SQL, *values)
+        INSERT INTO
+          #{self.class.to_s.tableize.downcase} (#{update_columns})
+        VALUES
+          (#{question_marks})
+      SQL
+      @id = QuestionsDBConnection.instance.last_insert_row_id
+    end
+  end
+end
+
+class Question < ModelBase
   attr_accessor :title, :body, :user_id
 
   def self.most_followed(n)
     QuestionFollow.most_followed_questions(n)
   end
 
-  def self.find_by_id(id)
-    question = QuestionsDBConnection.instance.execute(<<-SQL, id)
-      SELECT
-        *
-      FROM
-        questions
-      WHERE
-        id = ?
-    SQL
-    Question.new(question.first)
-  end
+  # def self.find_by_id(id)
+  #   question = QuestionsDBConnection.instance.execute(<<-SQL, id)
+  #     SELECT
+  #       *
+  #     FROM
+  #       questions
+  #     WHERE
+  #       id = ?
+  #   SQL
+  #   Question.new(question.first)
+  # end
 
   def self.find_by_author_id(author_id)
     question = QuestionsDBConnection.instance.execute(<<-SQL, author_id)
@@ -82,30 +140,30 @@ class Question
     QuestionLike.num_likes_for_question_id(@id)
   end
 
-  def save
-    if @id
-      QuestionsDBConnection.instance.execute(<<-SQL, @title, @body, @user_id, @id)
-        UPDATE
-          questions
-        SET
-          title = ?, body = ?, user_id = ?
-        WHERE
-          id = ?
-      SQL
-    else
-      QuestionsDBConnection.instance.execute(<<-SQL, @title, @body, @user_id)
-        INSERT INTO
-          questions (title, body, user_id)
-        VALUES
-          (?, ?, ?)
-      SQL
-      @id = QuestionsDBConnection.instance.last_insert_row_id
-    end
-  end
+  # def save
+  #   if @id
+  #     QuestionsDBConnection.instance.execute(<<-SQL, @title, @body, @user_id, @id)
+  #       UPDATE
+  #         questions
+  #       SET
+  #         title = ?, body = ?, user_id = ?
+  #       WHERE
+  #         id = ?
+  #     SQL
+  #   else
+  #     QuestionsDBConnection.instance.execute(<<-SQL, @title, @body, @user_id)
+  #       INSERT INTO
+  #         questions (title, body, user_id)
+  #       VALUES
+  #         (?, ?, ?)
+  #     SQL
+  #     @id = QuestionsDBConnection.instance.last_insert_row_id
+  #   end
+  # end
 end
 
 
-class Reply
+class Reply < ModelBase
   attr_accessor :question_id, :parent_id, :user_id, :body
 
   def self.find_by_user_id(user_id)
@@ -180,30 +238,30 @@ class Reply
     child_replies.map { |child_reply_data| Reply.new(child_reply_data) } unless child_replies.empty?
   end
 
-  def save
-    if @id
-      QuestionsDBConnection.instance.execute(<<-SQL, @question_id, @parent_id, @user_id, @body, @id)
-        UPDATE
-          replies
-        SET
-          question_id = ?, parent_id = ?, user_id = ?, body = ?
-        WHERE
-          id = ?
-      SQL
-    else
-      QuestionsDBConnection.instance.execute(<<-SQL, @question_id, @parent_id, @user_id, @body)
-        INSERT INTO
-          replies (question_id, parent_id, user_id, body)
-        VALUES
-          (?, ?, ?, ?)
-      SQL
-      @id = QuestionsDBConnection.instance.last_insert_row_id
-    end
-  end
+  # def save
+  #   if @id
+  #     QuestionsDBConnection.instance.execute(<<-SQL, @question_id, @parent_id, @user_id, @body, @id)
+  #       UPDATE
+  #         replies
+  #       SET
+  #         question_id = ?, parent_id = ?, user_id = ?, body = ?
+  #       WHERE
+  #         id = ?
+  #     SQL
+  #   else
+  #     QuestionsDBConnection.instance.execute(<<-SQL, @question_id, @parent_id, @user_id, @body)
+  #       INSERT INTO
+  #         replies (question_id, parent_id, user_id, body)
+  #       VALUES
+  #         (?, ?, ?, ?)
+  #     SQL
+  #     @id = QuestionsDBConnection.instance.last_insert_row_id
+  #   end
+  # end
 
 end
 
-class User
+class User < ModelBase
   attr_accessor :fname, :lname
 
   def self.find_by_name(fname, lname)
@@ -258,26 +316,26 @@ class User
   end
 
 
-  def save
-    if @id
-      QuestionsDBConnection.instance.execute(<<-SQL, @fname, @lname, @id)
-        UPDATE
-          users
-        SET
-          fname = ?, lname = ?
-        WHERE
-          id = ?
-      SQL
-    else
-      QuestionsDBConnection.instance.execute(<<-SQL, @fname, @lname)
-        INSERT INTO
-          users (fname, lname)
-        VALUES
-          (?, ?)
-      SQL
-      @id = QuestionsDBConnection.instance.last_insert_row_id
-    end
-  end
+  # def save
+  #   if @id
+  #     QuestionsDBConnection.instance.execute(<<-SQL, @fname, @lname, @id)
+  #       UPDATE
+  #         users
+  #       SET
+  #         fname = ?, lname = ?
+  #       WHERE
+  #         id = ?
+  #     SQL
+  #   else
+  #     QuestionsDBConnection.instance.execute(<<-SQL, @fname, @lname)
+  #       INSERT INTO
+  #         users (fname, lname)
+  #       VALUES
+  #         (?, ?)
+  #     SQL
+  #     @id = QuestionsDBConnection.instance.last_insert_row_id
+  #   end
+  # end
 end
 
 class QuestionFollow
